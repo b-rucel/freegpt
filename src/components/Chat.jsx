@@ -4,7 +4,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar } from "@/components/ui/avatar";
-import { SendIcon, BotIcon, UserIcon } from "lucide-react";
+import { SendIcon, BotIcon, UserIcon, MinimizeIcon, MaximizeIcon } from "lucide-react";
 
 // Message component to display individual messages
 const Message = ({ message, isUser }) => {
@@ -50,12 +50,23 @@ export function Chat() {
   ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [isVisible, setIsVisible] = useState(true);
   const messagesEndRef = useRef(null);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Ensure chat visibility after initial page load
+  useEffect(() => {
+    // Force visibility after a short delay to ensure DOM is fully loaded
+    const timer = setTimeout(() => {
+      setIsVisible(true);
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -65,25 +76,108 @@ export function Chat() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     
-    // Simulate AI typing
+    // Show typing indicator
     setIsTyping(true);
     
-    // Simulate AI response (replace with actual API call)
-    setTimeout(() => {
+    try {
+      // Call the Cloudflare Workers AI endpoint
+      const response = await fetch('https://workers-ai.brucelim.workers.dev', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt: input }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Add AI response to messages
       const aiMessage = {
         id: Date.now() + 1,
-        content: "This is a simulated response. In a real application, you would call your LLM API here.",
+        content: data.response || "Sorry, I couldn't generate a response.",
         isUser: false,
       };
+      
       setMessages((prev) => [...prev, aiMessage]);
+    } catch (error) {
+      console.error('Error calling AI API:', error);
+      
+      // Add error message
+      const errorMessage = {
+        id: Date.now() + 1,
+        content: "Sorry, there was an error processing your request. Please try again.",
+        isUser: false,
+      };
+      
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      // Hide typing indicator
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
+  // Save chat state to localStorage to persist between page loads
+  useEffect(() => {
+    if (messages.length > 1) { // Only save if we have more than the initial message
+      localStorage.setItem('chatMessages', JSON.stringify(messages));
+    }
+  }, [messages]);
+
+  // Load chat state from localStorage on initial load
+  useEffect(() => {
+    const savedMessages = localStorage.getItem('chatMessages');
+    if (savedMessages) {
+      try {
+        setMessages(JSON.parse(savedMessages));
+      } catch (e) {
+        console.error('Error parsing saved messages:', e);
+      }
+    }
+  }, []);
+
+  // Save visibility state to localStorage
+  useEffect(() => {
+    localStorage.setItem('chatVisible', JSON.stringify(isVisible));
+  }, [isVisible]);
+
+  // Load visibility state from localStorage
+  useEffect(() => {
+    const savedVisibility = localStorage.getItem('chatVisible');
+    if (savedVisibility !== null) {
+      try {
+        setIsVisible(JSON.parse(savedVisibility));
+      } catch (e) {
+        console.error('Error parsing saved visibility:', e);
+      }
+    }
+  }, []);
+
+  if (!isVisible) {
+    return (
+      <Button
+        className="fixed bottom-4 right-4 rounded-full p-4 shadow-lg"
+        onClick={() => setIsVisible(true)}
+      >
+        <BotIcon className="h-6 w-6" />
+      </Button>
+    );
+  }
+
   return (
-    <Card className="w-full max-w-3xl mx-auto h-[600px] flex flex-col">
-      <CardHeader>
+    <Card className="w-full max-w-3xl mx-auto h-[600px] flex flex-col shadow-lg">
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>AI Assistant</CardTitle>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setIsVisible(false)}
+        >
+          <MinimizeIcon className="h-4 w-4" />
+        </Button>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden">
         <ScrollArea className="h-[calc(600px-8rem)] pr-4">
@@ -108,7 +202,7 @@ export function Chat() {
             onChange={(e) => setInput(e.target.value)}
             className="flex-1"
           />
-          <Button type="submit" size="icon">
+          <Button type="submit" size="icon" disabled={isTyping || !input.trim()}>
             <SendIcon className="h-4 w-4" />
           </Button>
         </form>
