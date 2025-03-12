@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { SendIcon, BotIcon, UserIcon, MinimizeIcon, MaximizeIcon } from "lucide-react";
 
 // Message component to display individual messages
@@ -11,8 +11,10 @@ const Message = ({ message, isUser }) => {
   return (
     <div className={`flex gap-3 mb-4 ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser && (
-        <Avatar className="h-8 w-8 bg-primary">
-          <BotIcon className="h-4 w-4 text-primary-foreground" />
+        <Avatar className="h-8 w-8">
+          <AvatarFallback className="bg-primary">
+            <BotIcon className="h-4 w-4 text-primary-foreground" />
+          </AvatarFallback>
         </Avatar>
       )}
       <div
@@ -25,8 +27,10 @@ const Message = ({ message, isUser }) => {
         {message.content}
       </div>
       {isUser && (
-        <Avatar className="h-8 w-8 bg-secondary">
-          <UserIcon className="h-4 w-4 text-secondary-foreground" />
+        <Avatar className="h-8 w-8">
+          <AvatarFallback className="bg-secondary">
+            <UserIcon className="h-4 w-4 text-secondary-foreground" />
+          </AvatarFallback>
         </Avatar>
       )}
     </div>
@@ -45,28 +49,47 @@ const TypingIndicator = () => {
 };
 
 export function Chat() {
+  // Initialize with a welcome message
   const [messages, setMessages] = useState([
-    { id: 1, content: "Hello! How can I help you today?", isUser: false },
+    { id: "initial-message", content: "Hello! How can I help you today?", isUser: false }
   ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
-  const messagesEndRef = useRef(null);
-
-  // Auto-scroll to bottom when messages change
+  const scrollAreaRef = useRef(null);
+  
+  const initialRenderComplete = useRef(false);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!initialRenderComplete.current) {
+      initialRenderComplete.current = true;
+      return;
+    }
+    
+    const scrollArea = scrollAreaRef.current;
+    if (scrollArea) {
+      const scrollableElement = scrollArea.querySelector('[data-radix-scroll-area-viewport]');
+      if (scrollableElement && messages.length > 1) {
+        scrollableElement.scrollTop = scrollableElement.scrollHeight;
+      }
+    }
   }, [messages]);
 
-  // Ensure chat visibility after initial page load
   useEffect(() => {
-    // Force visibility after a short delay to ensure DOM is fully loaded
     const timer = setTimeout(() => {
       setIsVisible(true);
     }, 500);
     
     return () => clearTimeout(timer);
   }, []);
+
+  // Ensure initial message is always present
+  useEffect(() => {
+    if (messages.length === 0 && initialRenderComplete.current) {
+      setMessages([
+        { id: "initial-message", content: "Hello! How can I help you today?", isUser: false }
+      ]);
+    }
+  }, [messages]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -120,42 +143,6 @@ export function Chat() {
     }
   };
 
-  // Save chat state to localStorage to persist between page loads
-  useEffect(() => {
-    if (messages.length > 1) { // Only save if we have more than the initial message
-      localStorage.setItem('chatMessages', JSON.stringify(messages));
-    }
-  }, [messages]);
-
-  // Load chat state from localStorage on initial load
-  useEffect(() => {
-    const savedMessages = localStorage.getItem('chatMessages');
-    if (savedMessages) {
-      try {
-        setMessages(JSON.parse(savedMessages));
-      } catch (e) {
-        console.error('Error parsing saved messages:', e);
-      }
-    }
-  }, []);
-
-  // Save visibility state to localStorage
-  useEffect(() => {
-    localStorage.setItem('chatVisible', JSON.stringify(isVisible));
-  }, [isVisible]);
-
-  // Load visibility state from localStorage
-  useEffect(() => {
-    const savedVisibility = localStorage.getItem('chatVisible');
-    if (savedVisibility !== null) {
-      try {
-        setIsVisible(JSON.parse(savedVisibility));
-      } catch (e) {
-        console.error('Error parsing saved visibility:', e);
-      }
-    }
-  }, []);
-
   if (!isVisible) {
     return (
       <Button
@@ -180,12 +167,17 @@ export function Chat() {
         </Button>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden">
-        <ScrollArea className="h-[calc(600px-8rem)] pr-4">
+        <ScrollArea 
+          ref={scrollAreaRef}
+          className="h-[calc(600px-8rem)] pr-4"
+          scrollHideDelay={100}
+          type="always"
+          style={{ scrollBehavior: "auto" }}
+        >
           {messages.map((message) => (
             <Message key={message.id} message={message} isUser={message.isUser} />
           ))}
           {isTyping && <TypingIndicator />}
-          <div ref={messagesEndRef} />
         </ScrollArea>
       </CardContent>
       <CardFooter className="border-t p-4">
