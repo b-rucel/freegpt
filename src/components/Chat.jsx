@@ -8,9 +8,12 @@ import {
   SendIcon,
   Sparkles,
   User2,
-  BotIcon,
-  MinimizeIcon
+  Maximize2,
+  Minimize2
 } from "lucide-react";
+
+// Import the CSS file
+import "@/styles/chat.css";
 
 // Message component to display individual messages
 const Message = ({ message, isUser }) => {
@@ -63,6 +66,32 @@ const TypingIndicator = () => {
   );
 };
 
+// Helper function to handle browser prefixes for fullscreen API
+const getFullscreenAPI = () => {
+  const doc = document;
+  
+  return {
+    requestFullscreen: element => {
+      if (element.requestFullscreen) return element.requestFullscreen();
+      if (element.webkitRequestFullscreen) return element.webkitRequestFullscreen();
+      if (element.mozRequestFullScreen) return element.mozRequestFullScreen();
+      if (element.msRequestFullscreen) return element.msRequestFullscreen();
+    },
+    exitFullscreen: () => {
+      if (doc.exitFullscreen) return doc.exitFullscreen();
+      if (doc.webkitExitFullscreen) return doc.webkitExitFullscreen();
+      if (doc.mozCancelFullScreen) return doc.mozCancelFullScreen();
+      if (doc.msExitFullscreen) return doc.msExitFullscreen();
+    },
+    fullscreenElement: () => {
+      return doc.fullscreenElement || 
+             doc.webkitFullscreenElement || 
+             doc.mozFullScreenElement || 
+             doc.msFullscreenElement;
+    }
+  };
+};
+
 export function Chat() {
   // Initialize with a welcome message
   const [messages, setMessages] = useState([
@@ -70,18 +99,57 @@ export function Chat() {
   ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [isVisible, setIsVisible] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const scrollAreaRef = useRef(null);
-
+  const chatContainerRef = useRef(null);
+  
+  // Prevent auto-scrolling to bottom on initial render
   const initialRenderComplete = useRef(false);
+
+  // Handle fullscreen change events
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const fullscreenAPI = getFullscreenAPI();
+      setIsFullscreen(!!fullscreenAPI.fullscreenElement());
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, []);
+
+  // Toggle fullscreen
+  const toggleFullscreen = () => {
+    const fullscreenAPI = getFullscreenAPI();
+    
+    if (!isFullscreen) {
+      if (chatContainerRef.current) {
+        fullscreenAPI.requestFullscreen(chatContainerRef.current);
+      }
+    } else {
+      fullscreenAPI.exitFullscreen();
+    }
+  };
+
+  // Disable auto-scroll on initial render, but enable it for new messages
   useEffect(() => {
     if (!initialRenderComplete.current) {
       initialRenderComplete.current = true;
       return;
     }
-
+    
+    // Only auto-scroll for new messages (not on initial render)
     const scrollArea = scrollAreaRef.current;
     if (scrollArea) {
+      // Find the actual scrollable element within the ScrollArea component
       const scrollableElement = scrollArea.querySelector('[data-radix-scroll-area-viewport]');
       if (scrollableElement && messages.length > 1) {
         scrollableElement.scrollTop = scrollableElement.scrollHeight;
@@ -89,88 +157,17 @@ export function Chat() {
     }
   }, [messages]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsVisible(true);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Ensure initial message is always present
-  useEffect(() => {
-    if (messages.length === 0 && initialRenderComplete.current) {
-      setMessages([
-        { id: "initial-message", content: "Hello! How can I help you today?", isUser: false }
-      ]);
-    }
-  }, [messages]);
-
-  // Add the typing indicator CSS to the document
-  useEffect(() => {
-    // Create a style element
-    const styleEl = document.createElement('style');
-    
-    // Add the CSS for the typing indicator
-    styleEl.textContent = `
-      .typing-dots-container {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-      
-      .typing-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        animation: typingBounce 0.8s infinite ease-in-out;
-      }
-      
-      .typing-dot-1 {
-        background-color: #4f46e5; /* Indigo */
-        animation-delay: 0s;
-      }
-      
-      .typing-dot-2 {
-        background-color: #8b5cf6; /* Violet */
-        animation-delay: 0.2s;
-      }
-      
-      .typing-dot-3 {
-        background-color: #06b6d4; /* Cyan */
-        animation-delay: 0.4s;
-      }
-      
-      @keyframes typingBounce {
-        0%, 80%, 100% {
-          transform: translateY(0);
-        }
-        40% {
-          transform: translateY(-8px);
-        }
-      }
-    `;
-    
-    // Append the style element to the head
-    document.head.appendChild(styleEl);
-    
-    // Clean up function to remove the style element when component unmounts
-    return () => {
-      document.head.removeChild(styleEl);
-    };
-  }, []);
-
   const handleSend = async () => {
     if (!input.trim()) return;
-
+    
     // Add user message
     const userMessage = { id: Date.now(), content: input, isUser: true };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
-
+    
     // Show typing indicator
     setIsTyping(true);
-
+    
     try {
       // Call the Cloudflare Workers AI endpoint
       const response = await fetch('https://workers-ai.brucelim.workers.dev', {
@@ -180,31 +177,31 @@ export function Chat() {
         },
         body: JSON.stringify({ prompt: input }),
       });
-
+      
       if (!response.ok) {
         throw new Error(`API request failed with status ${response.status}`);
       }
-
+      
       const data = await response.json();
-
+      
       // Add AI response to messages
       const aiMessage = {
         id: Date.now() + 1,
         content: data.response || "Sorry, I couldn't generate a response.",
         isUser: false,
       };
-
+      
       setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
       console.error('Error calling AI API:', error);
-
+      
       // Add error message
       const errorMessage = {
         id: Date.now() + 1,
         content: "Sorry, there was an error processing your request. Please try again.",
         isUser: false,
       };
-
+      
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       // Hide typing indicator
@@ -212,33 +209,33 @@ export function Chat() {
     }
   };
 
-  if (!isVisible) {
-    return (
-      <Button
-        className="fixed bottom-4 right-4 rounded-full p-4 shadow-lg"
-        onClick={() => setIsVisible(true)}
-      >
-        <BotIcon className="h-6 w-6" />
-      </Button>
-    );
-  }
-
   return (
-    <Card className="w-full max-w-3xl mx-auto h-[600px] flex flex-col shadow-lg">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>AI Assistant</CardTitle>
+    <Card 
+      ref={chatContainerRef}
+      className={`w-full max-w-3xl mx-auto h-[600px] flex flex-col shadow-lg ${isFullscreen ? 'chat-fullscreen' : ''}`}
+    >
+      <CardHeader className="pb-0 flex flex-row items-center justify-between">
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-violet-500" />
+          AI Assistant
+        </CardTitle>
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setIsVisible(false)}
+          onClick={toggleFullscreen}
+          className="ml-auto"
         >
-          <MinimizeIcon className="h-4 w-4" />
+          {isFullscreen ? (
+            <Minimize2 className="h-4 w-4" />
+          ) : (
+            <Maximize2 className="h-4 w-4" />
+          )}
         </Button>
       </CardHeader>
-      <CardContent className="flex-1 overflow-hidden">
-        <ScrollArea
+      <CardContent className="flex-1 overflow-hidden pt-4">
+        <ScrollArea 
           ref={scrollAreaRef}
-          className="h-[calc(600px-8rem)] pr-4"
+          className={`h-[calc(600px-8rem)] pr-4 ${isFullscreen ? 'scroll-area-fullscreen' : ''}`}
           scrollHideDelay={100}
           type="always"
           style={{ scrollBehavior: "auto" }}
