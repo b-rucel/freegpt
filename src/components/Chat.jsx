@@ -3,16 +3,27 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar } from "@/components/ui/avatar";
-import { SendIcon, BotIcon, UserIcon, MinimizeIcon, MaximizeIcon } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  SendIcon,
+  Sparkles,
+  User2,
+  Maximize2,
+  Minimize2
+} from "lucide-react";
+
+// Import the CSS file
+import "@/styles/chat.css";
 
 // Message component to display individual messages
 const Message = ({ message, isUser }) => {
   return (
     <div className={`flex gap-3 mb-4 ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser && (
-        <Avatar className="h-8 w-8 bg-primary">
-          <BotIcon className="h-4 w-4 text-primary-foreground" />
+        <Avatar className="h-8 w-8">
+          <AvatarFallback className="bg-gradient-to-br from-violet-500 to-indigo-600 text-white">
+            <Sparkles className="h-4 w-4" />
+          </AvatarFallback>
         </Avatar>
       )}
       <div
@@ -25,48 +36,126 @@ const Message = ({ message, isUser }) => {
         {message.content}
       </div>
       {isUser && (
-        <Avatar className="h-8 w-8 bg-secondary">
-          <UserIcon className="h-4 w-4 text-secondary-foreground" />
+        <Avatar className="h-8 w-8">
+          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-400 text-white">
+            <User2 className="h-4 w-4" />
+          </AvatarFallback>
         </Avatar>
       )}
     </div>
   );
 };
 
-// Typing indicator component
+// Colorful typing indicator component
 const TypingIndicator = () => {
   return (
-    <div className="flex items-center gap-1 text-muted-foreground text-sm ml-12 mb-4">
-      <div className="animate-bounce h-1.5 w-1.5 bg-muted-foreground rounded-full"></div>
-      <div className="animate-bounce h-1.5 w-1.5 bg-muted-foreground rounded-full animation-delay-200"></div>
-      <div className="animate-bounce h-1.5 w-1.5 bg-muted-foreground rounded-full animation-delay-400"></div>
+    <div className="flex gap-3 mb-4">
+      <Avatar className="h-8 w-8">
+        <AvatarFallback className="bg-gradient-to-br from-violet-500 to-indigo-600 text-white">
+          <Sparkles className="h-4 w-4" />
+        </AvatarFallback>
+      </Avatar>
+      <div className="px-4 py-2 rounded-lg bg-muted rounded-tl-none flex items-center">
+        <div className="typing-dots-container">
+          <div className="typing-dot typing-dot-1"></div>
+          <div className="typing-dot typing-dot-2"></div>
+          <div className="typing-dot typing-dot-3"></div>
+        </div>
+      </div>
     </div>
   );
 };
 
+// Helper function to handle browser prefixes for fullscreen API
+const getFullscreenAPI = () => {
+  const doc = document;
+  
+  return {
+    requestFullscreen: element => {
+      if (element.requestFullscreen) return element.requestFullscreen();
+      if (element.webkitRequestFullscreen) return element.webkitRequestFullscreen();
+      if (element.mozRequestFullScreen) return element.mozRequestFullScreen();
+      if (element.msRequestFullscreen) return element.msRequestFullscreen();
+    },
+    exitFullscreen: () => {
+      if (doc.exitFullscreen) return doc.exitFullscreen();
+      if (doc.webkitExitFullscreen) return doc.webkitExitFullscreen();
+      if (doc.mozCancelFullScreen) return doc.mozCancelFullScreen();
+      if (doc.msExitFullscreen) return doc.msExitFullscreen();
+    },
+    fullscreenElement: () => {
+      return doc.fullscreenElement || 
+             doc.webkitFullscreenElement || 
+             doc.mozFullScreenElement || 
+             doc.msFullscreenElement;
+    }
+  };
+};
+
 export function Chat() {
+  // Initialize with a welcome message
   const [messages, setMessages] = useState([
-    { id: 1, content: "Hello! How can I help you today?", isUser: false },
+    { id: "initial-message", content: "Hello! How can I help you today?", isUser: false }
   ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [isVisible, setIsVisible] = useState(true);
-  const messagesEndRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const scrollAreaRef = useRef(null);
+  const chatContainerRef = useRef(null);
+  
+  // Prevent auto-scrolling to bottom on initial render
+  const initialRenderComplete = useRef(false);
 
-  // Auto-scroll to bottom when messages change
+  // Handle fullscreen change events
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const handleFullscreenChange = () => {
+      const fullscreenAPI = getFullscreenAPI();
+      setIsFullscreen(!!fullscreenAPI.fullscreenElement());
+    };
 
-  // Ensure chat visibility after initial page load
-  useEffect(() => {
-    // Force visibility after a short delay to ensure DOM is fully loaded
-    const timer = setTimeout(() => {
-      setIsVisible(true);
-    }, 500);
-    
-    return () => clearTimeout(timer);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
   }, []);
+
+  // Toggle fullscreen
+  const toggleFullscreen = () => {
+    const fullscreenAPI = getFullscreenAPI();
+    
+    if (!isFullscreen) {
+      if (chatContainerRef.current) {
+        fullscreenAPI.requestFullscreen(chatContainerRef.current);
+      }
+    } else {
+      fullscreenAPI.exitFullscreen();
+    }
+  };
+
+  // Disable auto-scroll on initial render, but enable it for new messages
+  useEffect(() => {
+    if (!initialRenderComplete.current) {
+      initialRenderComplete.current = true;
+      return;
+    }
+    
+    // Only auto-scroll for new messages (not on initial render)
+    const scrollArea = scrollAreaRef.current;
+    if (scrollArea) {
+      // Find the actual scrollable element within the ScrollArea component
+      const scrollableElement = scrollArea.querySelector('[data-radix-scroll-area-viewport]');
+      if (scrollableElement && messages.length > 1) {
+        scrollableElement.scrollTop = scrollableElement.scrollHeight;
+      }
+    }
+  }, [messages]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -120,72 +209,41 @@ export function Chat() {
     }
   };
 
-  // Save chat state to localStorage to persist between page loads
-  useEffect(() => {
-    if (messages.length > 1) { // Only save if we have more than the initial message
-      localStorage.setItem('chatMessages', JSON.stringify(messages));
-    }
-  }, [messages]);
-
-  // Load chat state from localStorage on initial load
-  useEffect(() => {
-    const savedMessages = localStorage.getItem('chatMessages');
-    if (savedMessages) {
-      try {
-        setMessages(JSON.parse(savedMessages));
-      } catch (e) {
-        console.error('Error parsing saved messages:', e);
-      }
-    }
-  }, []);
-
-  // Save visibility state to localStorage
-  useEffect(() => {
-    localStorage.setItem('chatVisible', JSON.stringify(isVisible));
-  }, [isVisible]);
-
-  // Load visibility state from localStorage
-  useEffect(() => {
-    const savedVisibility = localStorage.getItem('chatVisible');
-    if (savedVisibility !== null) {
-      try {
-        setIsVisible(JSON.parse(savedVisibility));
-      } catch (e) {
-        console.error('Error parsing saved visibility:', e);
-      }
-    }
-  }, []);
-
-  if (!isVisible) {
-    return (
-      <Button
-        className="fixed bottom-4 right-4 rounded-full p-4 shadow-lg"
-        onClick={() => setIsVisible(true)}
-      >
-        <BotIcon className="h-6 w-6" />
-      </Button>
-    );
-  }
-
   return (
-    <Card className="w-full max-w-3xl mx-auto h-[600px] flex flex-col shadow-lg">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>AI Assistant</CardTitle>
+    <Card 
+      ref={chatContainerRef}
+      className={`w-full max-w-3xl mx-auto h-[600px] flex flex-col shadow-lg ${isFullscreen ? 'chat-fullscreen' : ''}`}
+    >
+      <CardHeader className="pb-0 flex flex-row items-center justify-between">
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-violet-500" />
+          AI Assistant
+        </CardTitle>
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setIsVisible(false)}
+          onClick={toggleFullscreen}
+          className="ml-auto"
         >
-          <MinimizeIcon className="h-4 w-4" />
+          {isFullscreen ? (
+            <Minimize2 className="h-4 w-4" />
+          ) : (
+            <Maximize2 className="h-4 w-4" />
+          )}
         </Button>
       </CardHeader>
-      <CardContent className="flex-1 overflow-hidden">
-        <ScrollArea className="h-[calc(600px-8rem)] pr-4">
+      <CardContent className="flex-1 overflow-hidden pt-4">
+        <ScrollArea 
+          ref={scrollAreaRef}
+          className={`h-[calc(600px-8rem)] pr-4 ${isFullscreen ? 'scroll-area-fullscreen' : ''}`}
+          scrollHideDelay={100}
+          type="always"
+          style={{ scrollBehavior: "auto" }}
+        >
           {messages.map((message) => (
             <Message key={message.id} message={message} isUser={message.isUser} />
           ))}
           {isTyping && <TypingIndicator />}
-          <div ref={messagesEndRef} />
         </ScrollArea>
       </CardContent>
       <CardFooter className="border-t p-4">
@@ -209,4 +267,4 @@ export function Chat() {
       </CardFooter>
     </Card>
   );
-} 
+}
